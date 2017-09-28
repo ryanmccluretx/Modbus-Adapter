@@ -235,15 +235,15 @@ The python adapters are dependent upon the ClearBlade Python SDK and its depende
 
 execute 
 
-`git clone git@github.com:ClearBlade/Modbus-Adapter.git` 
-`cd python` 
-`python setup.py install`
+`git clone git@github.com:ClearBlade/Modbus-Adapter.git
+cd python
+python setup.py install`
 
 __OR__
-
-`pip install  -U pymodbus` 
-`pip install -U clearblade`
-
+```
+pip install  -U pymodbus 
+pip install -U clearblade
+```
 ## Todo
 ---
  - Complete construction of Modbus client adapter
