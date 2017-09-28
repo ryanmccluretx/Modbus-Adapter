@@ -234,12 +234,14 @@ TBD - Runtime configuration currently not needed
 The python adapters are dependent upon the ClearBlade Python SDK and its dependent libraries being installed. In addition, a third-party library (https://github.com/riptideio/pymodbus) providing Modbus functionality is being utilized. To install the dependent libraries:
 
 execute 
-
-`git clone git@github.com:ClearBlade/Modbus-Adapter.git
-cd python
-python setup.py install`
+```
+git clone git@github.com:ClearBlade/Modbus-Adapter.git 
+cd python 
+python setup.py install
+```
 
 __OR__
+
 ```
 pip install  -U pymodbus 
 pip install -U clearblade
