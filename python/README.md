@@ -21,7 +21,117 @@ Each of the data collections contains columns representing the Modbus Unit ID (s
 ### Modbus Client Adapter
 The modbus client adapter functions as a modbus master. The adapter allows an IoT gateway (or any other client) to function as a _Modbus client_ in order to access data stored on modbus devices.
 
-_Construction in progress_
+Communication with the Modbus Client Adapter is enabled through MQTT. Any gateway or device wishing to retrieve data from a Modbus device should publish a JSON message the the ClearBlade Platform message broker.
+
+#### MQTT Topic Structure
+The Modbus client adapter utilizes MQTT messaging to communicate with the ClearBlade Platform. The Modbus client adapter will subscribe to a specific topic in order to handle Modbus device requests. Additionally, the Modbus client adapter will publish messages to MQTT topics in order to communicate the results of requests to Modbus devices. The topic structures utilized by the Modbus client adapter are as follows:
+
+  * Modbus Device Request: {__TOPIC ROOT__}/modbus/command/request
+  * Modbus Device Response: {__TOPIC ROOT__}/modbus/command/response
+  * Modbus Device Error: {__TOPIC ROOT__}/modbus/command/error
+
+#### MQTT Message structure
+
+##### Modbus Device Request Payload Format
+The payload of a Modbus Device Request should have the following
+
+```json
+    {
+      'ModbusHost': 'modbushost' --> String
+      'FunctionCode': modbus_port, --> Integer
+      'UnitID': device_unit_id, --> Integer
+      'StartAddress': start_address, --> Integer
+      'AddressCount': address_count, --> Integer
+      'Data': [2, 3, 4] --> Array of integers (register requests) or booleans (coil/contact requests)
+    }
+```
+
+   __*Where*__ 
+
+   __ModbusHost__
+  * REQUIRED
+  * The host name of the modbus server to contact
+
+   __FunctionCode__
+  * REQUIRED
+  * The Modbus function to execute on the Modbus device
+    * 1 - Read Coil
+    * 2 - Read Discrete Input
+    * 3 - Read Holding Registers
+    * 4 - Read Input Registers
+    * 5 - Write Single Coil
+    * 6 - Write Single Holding Register
+    * 15 - Write Multiple Coils
+    * 16 - Write Multiple Holding Registers
+
+   __UnitID__
+  * REQUIRED
+  * The Modbus Unit ID associated with the Modbus device to access
+
+   __StartAddress__
+  * REQUIRED
+  * The address associated with the coil/register to be accessed
+
+   __AddressCount__
+  * OPTIONAL
+  * If more than one coil/register are to be accessed, the AddressCount property indicates the number of sequential addresses to be accessed, beginning with the address specified by the StartAddress property.
+   
+   __Data__
+  * REQUIRED for function codes 5, 6, 15, and 16
+  * The data to be written to Modbus device coils/registers, contained within an array
+  * Modbus coils store boolean only data. Function codes 5 and 15, therefore, require an array of boolean values.
+    * [true, false, true, true, etc.]
+  * Modbus registers store 16 bit registers. Function codes 6 and 16, therefore, require an array of integer values.
+    * [5, 246, 34, etc.]
+
+##### Modbus Device Response Payload Format
+
+```json
+    {
+      'request': {
+          'ModbusHost': 'modbushost' --> String
+          'FunctionCode': modbus_port, --> Integer
+          'UnitID': device_unit_id, --> Integer
+          'StartAddress': start_address, --> Integer
+          'AddressCount': address_count, --> Integer
+          'Data': [2, 3, 4] --> Array of integers (register requests) or booleans (coil requests)
+      },
+      'response': {
+          'Data': response_data --> will be an individual value or an array, depending on the function code
+      }
+    }
+```
+
+   __*Where*__ 
+
+   __response.Data__
+  * Will contain an array of boolean values, for function codes 1 and 2
+  * Will contain an array of 16-bit integers, for function codes 3 and 4
+  * Will contain a single boolean value representing the value written to the coil, for function code 5
+  * Will contain a single 16-bit value representing the value written to the register, for function code 6
+  * Will contain a single integer value representing the number of coils written to, for function code 15
+  * Will contain a single integer value representing the number of registers written to, for function code 16
+
+##### Modbus Device Error Response Payload Format
+
+```json
+    {
+      'request': {
+          'ModbusHost': 'modbushost' --> String
+          'FunctionCode': modbus_port, --> Integer
+          'UnitID': device_unit_id, --> Integer
+          'StartAddress': start_address, --> Integer
+          'AddressCount': address_count, --> Integer
+          'Data': [2, 3, 4] --> Array of integers (register requests) or booleans (coil/contact requests)
+      },
+      'error': error_message
+    }
+```
+
+   __*Where*__ 
+
+   __error__
+  * Will contain a string describing the error condition encountered
 
 ## ClearBlade Platform Dependencies
 The Python Modbus adapters were constructed to provide the ability to communicate with a _System_ defined in a ClearBlade Platform instance. Therefore, the adapters require a _System_ to have been created within a ClearBlade Platform instance.
@@ -76,7 +186,16 @@ The modbus adapters were written to be compatible with both Python 2 and Python 
 ##### Python 3
 `python3 modbus-server-adapter.py --systemKey=<PLATFORM SYSTEM KEY> --systemSecret=<PLATFORM SYSTEM SECRET> --deviceID=<AUTH DEVICE NAME> --activeKey=<AUTH DEVICE ACTIVE KEY> --httpUrl <CB PLATFORM URL> --httpPort=<CB PLATFORM PORT> --messagingUrl=<CB PLATFORM MESSAGING URL> --messagingPort=<CB PLATFORM MESSAGING PORT> --adapterSettingsCollection=<CB DATA COLLECTION NAME> --adapterSettingsItem=<ROW ITEM ID VALUE> --topicRoot=<TOPIC ROOT> --deviceProvisionSvc=<PROVISIONING SERVICE NAME> --deviceHealthSvc=<HEALTH SERVICE NAME> --deviceLogsSvc=<DEVICE LOGS SERVICE NAME> --deviceStatusSvc=<DEVICE STATUS SERVICE NAME> --deviceDecommissionSvc=<DECOMMISSION SERVICE NAME> --logLevel=<LOG LEVEL> --logCB --logMQTT --modbusZeroMode --modbusPort=<MODBUS TCP SERVER PORT> --inputContactsCollection=<DISCRETE INPUT CONTACTS COLLECTION NAME> --outputCoilsCollection=<DISCRETE OUTPUT COILS COLLECTION NAME> --inputRegisterCollection=<ANALOG INPUT REGISTERS COLLECTION NAME> --outputRegisterCollection<ANALOG OUTPUT HOLDING REGISTERS COLLECTION NAME>`
 
-   *Where* 
+#### Modbus Client Adapter
+
+##### Python 2
+`python modbus-client-adapter.py --systemKey=<PLATFORM SYSTEM KEY> --systemSecret=<PLATFORM SYSTEM SECRET> --deviceID=<AUTH DEVICE NAME> --activeKey=<AUTH DEVICE ACTIVE KEY> --httpUrl=<CB PLATFORM URL> --httpPort=<CB PLATFORM PORT> --messagingUrl=<CB PLATFORM MESSAGING URL> --messagingPort=<CB PLATFORM MESSAGING PORT> --adapterSettingsCollection=<CB DATA COLLECTION NAME> --adapterSettingsItem=<ROW ITEM ID VALUE> --topicRoot=<TOPIC ROOT> --deviceProvisionSvc=<PROVISIONING SERVICE NAME> --deviceHealthSvc=<HEALTH SERVICE NAME> --deviceLogsSvc=<DEVICE LOGS SERVICE NAME> --deviceStatusSvc=<DEVICE STATUS SERVICE NAME> --deviceDecommissionSvc=<DECOMMISSION SERVICE NAME> --logLevel=<LOG LEVEL> --logCB --logMQTT --modbusZeroMode --modbusPort=<MODBUS TCP SERVER PORT> --inputContactsCollection=<DISCRETE INPUT CONTACTS COLLECTION NAME> --outputCoilsCollection=<DISCRETE OUTPUT COILS COLLECTION NAME> --inputRegisterCollection=<ANALOG INPUT REGISTERS COLLECTION NAME> --outputRegisterCollection<ANALOG OUTPUT HOLDING REGISTERS COLLECTION NAME>`
+
+##### Python 3
+`python3 modbus-client-adapter.py --systemKey=<PLATFORM SYSTEM KEY> --systemSecret=<PLATFORM SYSTEM SECRET> --deviceID=<AUTH DEVICE NAME> --activeKey=<AUTH DEVICE ACTIVE KEY> --httpUrl <CB PLATFORM URL> --httpPort=<CB PLATFORM PORT> --messagingUrl=<CB PLATFORM MESSAGING URL> --messagingPort=<CB PLATFORM MESSAGING PORT> --adapterSettingsCollection=<CB DATA COLLECTION NAME> --adapterSettingsItem=<ROW ITEM ID VALUE> --topicRoot=<TOPIC ROOT> --deviceProvisionSvc=<PROVISIONING SERVICE NAME> --deviceHealthSvc=<HEALTH SERVICE NAME> --deviceLogsSvc=<DEVICE LOGS SERVICE NAME> --deviceStatusSvc=<DEVICE STATUS SERVICE NAME> --deviceDecommissionSvc=<DECOMMISSION SERVICE NAME> --logLevel=<LOG LEVEL> --logCB --logMQTT`
+
+
+   __*Where*__ 
 
    __systemKey__
   * REQUIRED
@@ -218,16 +337,13 @@ The modbus adapters were written to be compatible with both Python 2 and Python 
   * OPTIONAL
   * Default value is __Analog\_Output\_Holding\_Registers__
 
-#### Modbus Client Adapter
-
-_Development in progress_
-
 ### Runtime Configuration
 
 #### Modbus Server Adapter
-TBD - Runtime configuration currently not needed
+Runtime configuration currently not being utilized as it is currently not needed.
 
 #### Modbus Client Adapter
+Runtime configuration currently not being utilized as it is currently not needed.
 
 ## Setup
 ---
@@ -246,7 +362,5 @@ __OR__
 pip install  -U pymodbus 
 pip install -U clearblade
 ```
-## Todo
----
- - Complete construction of Modbus client adapter
+
 

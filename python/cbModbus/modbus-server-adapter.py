@@ -1,5 +1,4 @@
-"""Adapter docstring
-"""
+"""modbus-server-adapter"""
 import sys
 import argparse
 import logging
