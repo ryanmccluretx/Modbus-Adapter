@@ -207,7 +207,7 @@ The modbus adapters were written to be compatible with both Python 2 and Python 
    
    __deviceID__
   * REQUIRED
-  * The device name the BLE adapter will use to authenticate to the ClearBlade Platform
+  * The device name the modbus adapter will use to authenticate to the ClearBlade Platform
   * Requires the device to have been defined in the _Auth - Devices_ collection within the ClearBlade Platform __System__
    
    __activeKey__
@@ -236,12 +236,10 @@ The modbus adapters were written to be compatible with both Python 2 and Python 
   * Defaults to __1883__
 
    __adapterSettingsCollection__
-  * The MQTT port number of the ClearBlade Platform instance the adapter will connect to
   * See the _Runtime Configuration_ section below
   * OPTIONAL
 
    __adapterSettingsItem__
-  * The MQTT port number of the ClearBlade Platform instance the adapter will connect to
   * See the _Runtime Configuration_ section below
   * OPTIONAL
 
