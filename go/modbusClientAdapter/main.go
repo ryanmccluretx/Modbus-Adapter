@@ -93,7 +93,7 @@ func main() {
 	validateFlags()
 
 	//create the log file with the correct permissions
-	logfile, err := os.OpenFile("/var/log/xDotAdapter", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	logfile, err := os.OpenFile("/var/log/modbusClientAdapter", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
