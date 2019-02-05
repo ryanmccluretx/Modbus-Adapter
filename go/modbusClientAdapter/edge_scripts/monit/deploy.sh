@@ -28,7 +28,7 @@ EOF
 sed -i '/modbusClientAdapter.pid/{N;N;N;N;d}' /etc/monitrc
 
 #Add the adapter to monit
-sed -i '/#  check process monit with pidfile/i \
+sed -i '/#  check process apache with pidfile/i \
   check process modbusClientAdapter with pidfile \/var\/run\/modbusClientAdapter.pid \
     start program = "\/etc\/init.d\/modbusClientAdapter start" with timeout 60 seconds \
     stop program  = "\/etc\/init.d\/modbusClientAdapter stop" \
