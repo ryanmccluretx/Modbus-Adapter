@@ -13,6 +13,17 @@ mv modbusClientAdapter.etc.default /etc/default/modbusClientAdapter
 #Ensure init.d script is executable
 chmod +x /etc/init.d/modbusClientAdapter
 
+#Add adapter to log rotate
+cat << EOF > /etc/logrotate.d/modbusClientAdapter.conf
+/var/log/modbusClientAdapter {
+    size 10M
+    rotate 3
+    compress
+    copytruncate
+    missingok
+}
+EOF
+
 #Remove modbusClientAdapter from monit in case it was already there
 sed -i '/modbusClientAdapter.pid/{N;N;N;N;d}' /etc/monitrc
 
@@ -26,5 +37,8 @@ sed -i '/#  check process monit with pidfile/i \
 
 #restart monit
 /etc/init.d/monit restart
+
+#Start the adapter
+monit start modbusClientAdapter
 
 echo "modbusClientAdapter Deployed"

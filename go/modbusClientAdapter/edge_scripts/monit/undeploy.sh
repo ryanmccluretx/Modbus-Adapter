@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#Stop the adapter
+monit stop modbusClientAdapter
+
 #Remove modbusClientAdapter from monit
 sed -i '/modbusClientAdapter.pid/{N;N;N;N;d}' /etc/monitrc
 

@@ -4,3 +4,4 @@ cbModbus.egg-info/
 .vscode
 .idea
 .DS_Store
+go/modbusClientAdapter/modbusClientAdapter
