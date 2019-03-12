@@ -30,15 +30,26 @@ The Modbus client adapter utilizes MQTT messaging to communicate with the ClearB
 ### Modbus Device Request Payload Format
 The payload of a Modbus Device Request should have the following
 
-```json
-    {
-      'ModbusHost': 'modbushost' --> String
-      'FunctionCode': modbus_port, --> Integer
-      'StartAddress': start_address, --> Integer
-      'AddressCount': address_count, --> Integer
-      'Data': [2, 3, 4] --> Array of integers (register requests) or booleans (coil/contact requests)
-    }
+```js
+/**
+ * @typedef Request
+ * @parameter {string} ModbusHost IP Address of ModbusHost
+ * @parameter {number} FunctionCode Modbus function to execute on the Modbus device
+ * @parameter {number} StartAddress address associated with the coil/register to be accessed
+ * @parameter {number} AddressCount number of sequential addresses to be accessed
+ * @parameter {number[]} Data - Array of integers (register requests) or booleans (coil/contact requests)
+ * @example
+      {
+            "ModbusHost": "192.168.0.9",
+            "FunctionCode": 1, 
+            "StartAddress": 0, 
+            "AddressCount": 3, 
+            "Data": [2, 3, 4] 
+      }
+ */
 ```
+
+[//]: TODO_Add_Identifier_to_JSON
 
    __*Where*__ 
 
@@ -76,19 +87,28 @@ The payload of a Modbus Device Request should have the following
 
 ### Modbus Device Response Payload Format
 
-```json
+```js
+
+/**
+ * @typedef Response
+ * @parameter {Request} request
+ * @parameter {Object} response
+ * @param {number|number[]} response.Data number (or array) depending on Function code
+ * @example
+
     {
-      'request': {
-          'ModbusHost': 'modbushost' --> String
-          'FunctionCode': modbus_port, --> Integer
-          'StartAddress': start_address, --> Integer
-          'AddressCount': address_count, --> Integer
-          'Data': [2, 3, 4] --> Array of integers (register requests) or booleans (coil requests)
+      "request": {
+            "ModbusHost": "192.168.0.9",
+            "FunctionCode": 1, 
+            "StartAddress": 0, 
+            "AddressCount": 3, 
+            "Data": [2, 3, 4] 
       },
-      'response': {
-          'Data': response_data --> will be an individual value or an array, depending on the function code
+      "response": {
+          "Data": [45,2,5]
       }
     }
+  */
 ```
 
    __*Where*__ 
@@ -103,17 +123,25 @@ The payload of a Modbus Device Request should have the following
 
 ### Modbus Device Error Response Payload Format
 
-```json
-    {
-      'request': {
-          'ModbusHost': 'modbushost' --> String
-          'FunctionCode': modbus_port, --> Integer
-          'StartAddress': start_address, --> Integer
-          'AddressCount': address_count, --> Integer
-          'Data': [2, 3, 4] --> Array of integers (register requests) or booleans (coil/contact requests)
+```js
+
+/**
+ * @typedef Response
+ * @parameter {Request} request
+ * @parameter {string} error
+ * @example
+
+      {
+      "request": {
+            "ModbusHost": "192.168.0.9",
+            "FunctionCode": 1, 
+            "StartAddress": 0, 
+            "AddressCount": 3, 
+            "Data": [2, 3, 4] 
       },
-      'error': error_message
+      "error": "malformed JSON"
     }
+  */
 ```
 
    __*Where*__ 

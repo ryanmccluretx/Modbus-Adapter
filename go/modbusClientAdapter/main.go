@@ -40,6 +40,7 @@ var (
 	cbBroker                  cbPlatformBroker
 	cbSubscribeChannel        <-chan *mqttTypes.Publish
 	endSubscribeWorkerChannel chan string
+	adapterID				  string
 )
 
 type cbPlatformBroker struct {
@@ -66,6 +67,7 @@ func init() {
 	flag.StringVar(&adapterConfigCollID, "adapterConfigCollectionID", "", "The ID of the data collection used to house adapter configuration (required)")
 	flag.StringVar(&topicRoot, "topicRoot", "modbus/command", "The root of all MQTT topics that should be used to publish/subscribe to (optional)")
 	flag.StringVar(&logLevel, "logLevel", "info", "The level of logging to use. Available levels are 'debug, 'info', 'warn', 'error', 'fatal' (optional)")
+	flag.StringVar(&adapterID, "adapterID", "", "Unique identifier for this adapter, typically SiteID where modbus adapter is deployed (optional)")
 
 }
 
@@ -189,14 +191,15 @@ func OnConnectLost(client mqtt.Client, connerr error) {
 
 //When the connection to the broker is complete, set up the subscriptions
 func OnConnect(client mqtt.Client) {
-	log.Println("[INFO] OnConnect - Connected to ClearBlade Platform MQTT broker")
+	topic := topicRoot + "/request"
+	log.Println("[INFO] OnConnect - Connected to ClearBlade Platform MQTT broker on topic:",topic)
 
 	//CleanSession, by default, is set to true. This results in non-durable subscriptions.
 	//We therefore need to re-subscribe
 	log.Println("[DEBUG] OnConnect - Begin Configuring Subscription(s)")
 
 	var err error
-	for cbSubscribeChannel, err = subscribe(topicRoot + "/request"); err != nil; {
+	for cbSubscribeChannel, err = subscribe(topic); err != nil; {
 		//Wait 30 seconds and retry
 		log.Printf("[ERROR] OnConnect - Error subscribing to MQTT: %s\n", err.Error())
 		log.Println("[ERROR] OnConnect - Will retry in 30 seconds...")
@@ -491,6 +494,12 @@ func publishModbusResponse(respJson map[string]interface{}) {
 
 	//Add a timestamp to the payload
 	respJson["timestamp"] = time.Now().Format(JavascriptISOString)
+
+	// TODO Add custom key for adapterID, defaulting to rail context, SiteID
+	if adapterID != "" {
+		respJson["SiteID"] = adapterID
+	}
+	
 
 	respStr, err := json.Marshal(respJson)
 	if err != nil {
