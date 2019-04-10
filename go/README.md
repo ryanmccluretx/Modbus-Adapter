@@ -40,7 +40,7 @@ The payload of a Modbus Device Request should have the following
  * @parameter {number[]} Data - Array of integers (register requests) or booleans (coil/contact requests)
  * @example
       {
-            "ModbusHost": "192.168.0.9",
+            "ModbusHost": "192.168.0.9:502",
             "FunctionCode": 1, 
             "StartAddress": 0, 
             "AddressCount": 3, 
@@ -98,7 +98,7 @@ The payload of a Modbus Device Request should have the following
 
     {
       "request": {
-            "ModbusHost": "192.168.0.9",
+            "ModbusHost": "192.168.0.9:502",
             "FunctionCode": 1, 
             "StartAddress": 0, 
             "AddressCount": 3, 
@@ -133,7 +133,7 @@ The payload of a Modbus Device Request should have the following
 
       {
       "request": {
-            "ModbusHost": "192.168.0.9",
+            "ModbusHost": "192.168.0.9:502",
             "FunctionCode": 1, 
             "StartAddress": 0, 
             "AddressCount": 3, 
