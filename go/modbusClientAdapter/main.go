@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -40,7 +41,7 @@ var (
 	cbBroker                  cbPlatformBroker
 	cbSubscribeChannel        <-chan *mqttTypes.Publish
 	endSubscribeWorkerChannel chan string
-	adapterID				  string
+	adapterID                 string
 )
 
 type cbPlatformBroker struct {
@@ -192,7 +193,7 @@ func OnConnectLost(client mqtt.Client, connerr error) {
 //When the connection to the broker is complete, set up the subscriptions
 func OnConnect(client mqtt.Client) {
 	topic := topicRoot + "/request"
-	log.Println("[INFO] OnConnect - Connected to ClearBlade Platform MQTT broker on topic:",topic)
+	log.Println("[INFO] OnConnect - Connected to ClearBlade Platform MQTT broker on topic:", topic)
 
 	//CleanSession, by default, is set to true. This results in non-durable subscriptions.
 	//We therefore need to re-subscribe
@@ -406,6 +407,13 @@ func handleModbusRequest(payload map[string]interface{}) error {
 		payload["Data"] = translateModbusBytesToData(modbusResults, addressCount)
 
 		log.Printf("[DEBUG] payload.Data set, payload = %#v\n", payload)
+	default:
+		log.Printf("[DEBUG] handleModbusRequest - adding default bytes to data field in payload: %#v\n", modbusResults)
+		var data []uint16
+		for x := uint16(0); x < addressCount; x++ {
+			data = append(data, binary.BigEndian.Uint16(modbusResults[x*2:(x*2)+2]))
+		}
+		payload["Data"] = data
 	}
 
 	log.Printf("[DEBUG] returning payload, payload = %#v\n", payload)
@@ -499,7 +507,6 @@ func publishModbusResponse(respJson map[string]interface{}) {
 	if adapterID != "" {
 		respJson["SiteID"] = adapterID
 	}
-	
 
 	respStr, err := json.Marshal(respJson)
 	if err != nil {
