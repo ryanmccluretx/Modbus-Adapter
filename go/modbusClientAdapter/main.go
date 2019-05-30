@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -91,6 +93,8 @@ func validateFlags() {
 func main() {
 	fmt.Println("Starting modbusClientAdapter...")
 
+	rand.Seed(time.Now().UnixNano())
+
 	//Validate the command line flags
 	flag.Usage = usage
 	validateFlags()
@@ -116,7 +120,7 @@ func main() {
 	cbBroker = cbPlatformBroker{
 
 		name:         "ClearBlade",
-		clientID:     deviceName + "_client",
+		clientID:     deviceName + "_client" + "-" + strconv.Itoa(rand.Intn(10000)),
 		client:       nil,
 		platformURL:  &platformURL,
 		messagingURL: &messagingURL,
