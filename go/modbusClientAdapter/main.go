@@ -99,21 +99,13 @@ func main() {
 	flag.Usage = usage
 	validateFlags()
 
-	//create the log file with the correct permissions
-	logfile, err := os.OpenFile("/var/log/modbusClientAdapter", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer logfile.Close()
-
 	//Initialize the logging mechanism
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	filter := &logutils.LevelFilter{
 		Levels:   []logutils.LogLevel{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"},
 		MinLevel: logutils.LogLevel(strings.ToUpper(logLevel)),
-		Writer:   logfile,
+		Writer:   os.Stdout,
 	}
 	log.SetOutput(filter)
 
@@ -132,7 +124,7 @@ func main() {
 	}
 
 	// Initialize ClearBlade Client
-	if err = initCbClient(cbBroker); err != nil {
+	if err := initCbClient(cbBroker); err != nil {
 		log.Println(err.Error())
 		log.Println("Unable to initialize CB broker client. Exiting.")
 		return
