@@ -219,6 +219,6 @@ In order to compile the adapter for execution, the following steps need to be pe
  2. Navigate to the _modbusClientAdapter_ directory  
     * ```cd go/modbusClientAdapter```
  3. Compile the adapter
-    * ```GOARCH=arm GOARM=5 CGO_ENABLED=1 GOOS=linux go build```
+    * ```GOARCH=arm GOARM=5 GOOS=linux go build```
 
 
