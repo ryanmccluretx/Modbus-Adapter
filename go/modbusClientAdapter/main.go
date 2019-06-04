@@ -28,6 +28,8 @@ const (
 	msgSubscribeQos     = 0
 	msgPublishQos       = 0
 	JavascriptISOString = "2006-01-02T15:04:05.000Z07:00"
+	tcpTimeout          = 10 * time.Second
+	tcpIdleTimeout      = 60 * time.Second
 )
 
 var (
@@ -44,6 +46,8 @@ var (
 	cbSubscribeChannel        <-chan *mqttTypes.Publish
 	endSubscribeWorkerChannel chan string
 	adapterID                 string
+	modbusHandler             *modbus.TCPClientHandler
+	modbusClient              modbus.Client
 )
 
 type cbPlatformBroker struct {
@@ -211,7 +215,17 @@ func OnConnect(client mqtt.Client) {
 func subscribeWorker() {
 	log.Println("[INFO] subscribeWorker - Starting subscribeWorker")
 
+	log.Println("[INFO] subscribeWorker - Initializing the modbus handler")
+	modbusHandler = &modbus.TCPClientHandler{}
+	modbusHandler.Timeout = tcpTimeout
+	modbusHandler.IdleTimeout = tcpIdleTimeout
+	modbusHandler.SlaveId = 0xFF
+	modbusHandler.Logger = log.New(os.Stdout, "", log.LstdFlags|log.Lshortfile)
+
+	defer modbusHandler.Close()
+
 	//Wait for subscriptions to be received
+	log.Println("[INFO] subscribeWorker - Waiting for modbus requests")
 	for {
 		select {
 		case message, ok := <-cbSubscribeChannel:
@@ -225,6 +239,21 @@ func subscribeWorker() {
 			return
 		}
 	}
+}
+
+func resetModbusClient(address string) (err error) {
+	modbusHandler.Close()
+
+	if address != "" {
+		modbusHandler.Address = address
+	}
+
+	// Connect to modbus manually so that multiple requests are handled in one connection session
+	if err = modbusHandler.Connect(); err != nil {
+		return
+	}
+	modbusClient = modbus.NewClient(modbusHandler)
+	return
 }
 
 func handleRequest(payload []byte) {
@@ -336,47 +365,60 @@ func handleModbusRequest(payload map[string]interface{}) error {
 	var modbusResults []byte
 	var err error
 
+	//See if the modbus address changed
+	if modbusHandler.Address != payload["ModbusHost"] {
+		log.Println("[INFO] handleModbusRequest - Modbus host address modified. Resetting Modbus Client")
+		resetModbusClient(payload["ModbusHost"].(string))
+	}
+
 	functionCode := int(payload["FunctionCode"].(float64))
 	startAddress := uint16(payload["StartAddress"].(float64))
 	addressCount := uint16(payload["AddressCount"].(float64))
 
-	client := modbus.TCPClient(payload["ModbusHost"].(string))
-
-	log.Printf("[DEBUG] function code = %d\n", functionCode)
-	log.Printf("[DEBUG] start address = %d\n", startAddress)
-	log.Printf("[DEBUG] address count = %d\n", addressCount)
+	log.Printf("[DEBUG] handleModbusRequest - function code = %d\n", functionCode)
+	log.Printf("[DEBUG] handleModbusRequest - start address = %d\n", startAddress)
+	log.Printf("[DEBUG] handleModbusRequest - address count = %d\n", addressCount)
 
 	switch functionCode {
 	case modbus.FuncCodeReadDiscreteInputs:
 		log.Println("[DEBUG] handleModbusRequest - invoking ReadDiscreteInputs")
-		modbusResults, err = client.ReadDiscreteInputs(startAddress, addressCount)
+		modbusResults, err = modbusClient.ReadDiscreteInputs(startAddress, addressCount)
 	case modbus.FuncCodeReadCoils:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeReadCoils")
-		modbusResults, err = client.ReadCoils(startAddress, addressCount)
+		modbusResults, err = modbusClient.ReadCoils(startAddress, addressCount)
 	case modbus.FuncCodeWriteSingleCoil:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteSingleCoil")
-		var modbusData uint16
-		if payload["Data"].([]bool)[0] == true {
-			modbusData = 1
-		} else {
-			modbusData = 0
+		var modbusData uint16 = 0x0000
+
+		switch payload["Data"].([]interface{})[0].(type) {
+		case float64:
+			if payload["Data"].([]interface{})[0].(float64) == 1 {
+				modbusData = 0xFF00
+			}
+		case bool:
+			if payload["Data"].([]interface{})[0].(bool) == true {
+				modbusData = 0xFF00
+			}
+		default:
+			log.Println("[ERROR] handleModbusRequest - Invalid data value passed for function code")
 		}
-		modbusResults, err = client.WriteSingleCoil(startAddress, modbusData)
+
+		modbusResults, err = modbusClient.WriteSingleCoil(startAddress, modbusData)
 	case modbus.FuncCodeWriteMultipleCoils:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteMultipleCoils")
-		modbusResults, err = client.WriteMultipleCoils(startAddress, addressCount, translateDataToModbusBytes(functionCode, payload["Data"].([]bool)))
+		modbusResults, err = modbusClient.WriteMultipleCoils(startAddress, addressCount, translateDataToModbusBytes(functionCode, payload["Data"].([]bool)))
 	case modbus.FuncCodeReadInputRegisters:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeReadInputRegisters")
-		modbusResults, err = client.ReadInputRegisters(startAddress, addressCount)
+		modbusResults, err = modbusClient.ReadInputRegisters(startAddress, addressCount)
 	case modbus.FuncCodeReadHoldingRegisters:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeReadHoldingRegisters")
-		modbusResults, err = client.ReadHoldingRegisters(startAddress, addressCount)
+		modbusResults, err = modbusClient.ReadHoldingRegisters(startAddress, addressCount)
 	case modbus.FuncCodeWriteSingleRegister:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteSingleRegister")
-		modbusResults, err = client.WriteSingleRegister(startAddress, uint16(payload["Data"].([]float64)[0]))
+		modbusResults, err = modbusClient.WriteSingleRegister(startAddress, uint16(payload["Data"].([]float64)[0]))
 	case modbus.FuncCodeWriteMultipleRegisters:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteMultipleRegisters")
-		modbusResults, err = client.WriteMultipleRegisters(startAddress, addressCount, payload["Data"].([]byte))
+		modbusResults, err = modbusClient.WriteMultipleRegisters(startAddress, addressCount, payload["Data"].([]byte))
 		//case modbus.FuncCodeReadWriteMultipleRegisters:
 		//	log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeReadWriteMultipleRegisters")
 		//	modbusResults, err = client.ReadWriteMultipleRegisters(startAddress, payload["AddressCount"].(uint16),)
