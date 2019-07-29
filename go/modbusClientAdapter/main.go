@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
 	"os"
 	"os/signal"
 	"strconv"
@@ -23,13 +24,14 @@ import (
 )
 
 const (
-	platURL             = "http://localhost:9000"
-	messURL             = "localhost:1883"
-	msgSubscribeQos     = 0
-	msgPublishQos       = 0
-	JavascriptISOString = "2006-01-02T15:04:05.000Z07:00"
-	tcpTimeout          = 10 * time.Second
-	tcpIdleTimeout      = 60 * time.Second
+	platURL                        = "http://localhost:9000"
+	messURL                        = "localhost:1883"
+	msgSubscribeQos                = 0
+	msgPublishQos                  = 0
+	JavascriptISOString            = "2006-01-02T15:04:05.000Z07:00"
+	tcpTimeout                     = 10 * time.Second
+	tcpIdleTimeout                 = 60 * time.Second
+	adapterConfigCollectionDefault = "adapter_config"
 )
 
 var (
@@ -40,7 +42,7 @@ var (
 	deviceName                string //Defaults to modbusClientAdapter
 	activeKey                 string
 	logLevel                  string //Defaults to info
-	adapterConfigCollID       string
+	adapterConfigCollection   string
 	topicRoot                 string
 	cbBroker                  cbPlatformBroker
 	cbSubscribeChannel        <-chan *mqttTypes.Publish
@@ -71,7 +73,7 @@ func init() {
 	flag.StringVar(&activeKey, "activeKey", "", "active key for device authentication (required)")
 	flag.StringVar(&platformURL, "platformURL", platURL, "platform url (optional)")
 	flag.StringVar(&messagingURL, "messagingURL", messURL, "messaging URL (optional)")
-	flag.StringVar(&adapterConfigCollID, "adapterConfigCollectionID", "", "The ID of the data collection used to house adapter configuration (required)")
+	flag.StringVar(&adapterConfigCollection, "adapterConfigCollection", adapterConfigCollectionDefault, "The ID of the data collection used to house adapter configuration (required)")
 	flag.StringVar(&topicRoot, "topicRoot", "modbus/command", "The root of all MQTT topics that should be used to publish/subscribe to (optional)")
 	flag.StringVar(&logLevel, "logLevel", "info", "The level of logging to use. Available levels are 'debug, 'info', 'warn', 'error', 'fatal' (optional)")
 	flag.StringVar(&adapterID, "adapterID", "", "Unique identifier for this adapter, typically SiteID where modbus adapter is deployed (optional)")
@@ -86,7 +88,7 @@ func usage() {
 func validateFlags() {
 	flag.Parse()
 
-	if sysKey == "" || sysSec == "" || activeKey == "" || adapterConfigCollID == "" {
+	if sysKey == "" || sysSec == "" || activeKey == "" || adapterConfigCollection == "" {
 
 		log.Printf("ERROR - Missing required flags\n\n")
 		flag.Usage()
@@ -219,8 +221,10 @@ func subscribeWorker() {
 	modbusHandler = &modbus.TCPClientHandler{}
 	modbusHandler.Timeout = tcpTimeout
 	modbusHandler.IdleTimeout = tcpIdleTimeout
-	modbusHandler.SlaveId = 0xFF
-	modbusHandler.Logger = log.New(os.Stdout, "", log.LstdFlags|log.Lshortfile)
+
+	if strings.ToUpper(logLevel) == "DEBUG" {
+		modbusHandler.Logger = log.New(os.Stdout, "", log.LstdFlags|log.Lshortfile)
+	}
 
 	defer modbusHandler.Close()
 
@@ -242,14 +246,23 @@ func subscribeWorker() {
 }
 
 func resetModbusClient(address string) (err error) {
+	log.Printf("[DEBUG] resetModbusClient - new address = %s\n", address)
+	log.Println("[DEBUG] resetModbusClient - Closing modbus handler")
 	modbusHandler.Close()
 
-	if address != "" {
-		modbusHandler.Address = address
+	if address == "" {
+		log.Printf("[DEBUG] resetModbusClient - Invalid address for modbus host: %s\n", address)
+		return fmt.Errorf("Invalid address for modbus host: %s", address)
 	}
 
+	modbusHandler.Address = address
+
 	// Connect to modbus manually so that multiple requests are handled in one connection session
+	log.Println("[DEBUG] resetModbusClient - Connecting modbus handler")
 	if err = modbusHandler.Connect(); err != nil {
+		//We need to reset the address to blank in order to avoid a nil pointer exception in the
+		//handleModbusRequest function
+		modbusHandler.Address = ""
 		return
 	}
 	modbusClient = modbus.NewClient(modbusHandler)
@@ -348,6 +361,12 @@ func handleRequest(payload []byte) {
 		log.Printf("[DEBUG] handleRequest - jsonPayload = %#v\n", jsonPayload)
 
 		if err != nil {
+			log.Printf("[ERROR] handleRequest - Error encountered: %s\n", err.Error())
+			switch err.(type) {
+			case *net.OpError:
+				//We have a network issue. At this point, we need to continually try and reconnect.
+				modbusHandler.Address = ""
+			}
 			addErrorToPayload(jsonPayload, err.Error(), 0)
 		} else {
 			if jsonPayload["success"] == nil {
@@ -368,7 +387,9 @@ func handleModbusRequest(payload map[string]interface{}) error {
 	//See if the modbus address changed
 	if modbusHandler.Address != payload["ModbusHost"] {
 		log.Println("[INFO] handleModbusRequest - Modbus host address modified. Resetting Modbus Client")
-		resetModbusClient(payload["ModbusHost"].(string))
+		if err := resetModbusClient(payload["ModbusHost"].(string)); err != nil {
+			return err
+		}
 	}
 
 	functionCode := int(payload["FunctionCode"].(float64))
@@ -506,8 +527,8 @@ func getAdapterConfig() {
 	query.EqualTo("adapter_name", "modbusClientAdapter")
 
 	//A nil query results in all rows being returned
-	log.Println("[DEBUG] getAdapterConfig - Executing query against table " + adapterConfigCollID)
-	results, err := cbBroker.client.GetData(adapterConfigCollID, query)
+	log.Println("[DEBUG] getAdapterConfig - Executing query against table " + adapterConfigCollection)
+	results, err := cbBroker.client.GetDataByName(adapterConfigCollection, query)
 	if err != nil {
 		log.Println("[DEBUG] getAdapterConfig - Adapter configuration could not be retrieved. Using defaults")
 		log.Printf("[DEBUG] getAdapterConfig - Error: %s\n", err.Error())
