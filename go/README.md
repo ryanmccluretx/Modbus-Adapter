@@ -139,7 +139,10 @@ The payload of a Modbus Device Request should have the following
             "AddressCount": 3, 
             "Data": [2, 3, 4] 
       },
-      "error": "malformed JSON"
+      "error": {
+            "code": 0,
+            "message": "malformed JSON"
+      }
     }
   */
 ```
@@ -147,7 +150,7 @@ The payload of a Modbus Device Request should have the following
    __*Where*__ 
 
    __error__
-  * Will contain a string describing the error condition encountered
+  * Will contain a JSON object describing the error condition encountered
 
 ## Executing the adapter
 `modbusClientAdapter -systemKey=<PLATFORM SYSTEM KEY> -systemSecret=<PLATFORM SYSTEM KEY> -deviceID=<AUTH DEVICE NAME> -activeKey=<AUTH DEVICE ACTIVE KEY> -platformURL=<CB PLATFORM URL> -messagingURL=<CB PLATFORM MESSAGING URL> -adapterConfigCollectionID=<CB DATA COLLECTION NAME> -topicRoot=<MQTT_TOPIC_ROOT> -logLevel=<LOG LEVEL>`
