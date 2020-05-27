@@ -104,9 +104,8 @@ The payload of a Modbus Device Request should have the following
             "AddressCount": 3, 
             "Data": [2, 3, 4] 
       },
-      "response": {
-          "Data": [45,2,5]
-      }
+      "Data": [45,2,5],
+      "success": true
     }
   */
 ```
@@ -139,6 +138,7 @@ The payload of a Modbus Device Request should have the following
             "AddressCount": 3, 
             "Data": [2, 3, 4] 
       },
+      "success": false,
       "error": {
             "code": 0,
             "message": "malformed JSON"
