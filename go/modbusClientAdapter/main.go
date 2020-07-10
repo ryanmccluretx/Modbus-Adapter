@@ -73,7 +73,7 @@ func init() {
 	flag.StringVar(&activeKey, "activeKey", "", "active key for device authentication (required)")
 	flag.StringVar(&platformURL, "platformURL", platURL, "platform url (optional)")
 	flag.StringVar(&messagingURL, "messagingURL", messURL, "messaging URL (optional)")
-	flag.StringVar(&adapterConfigCollection, "adapterConfigCollection", adapterConfigCollectionDefault, "The ID of the data collection used to house adapter configuration (required)")
+	flag.StringVar(&adapterConfigCollection, "adapterConfigCollection", adapterConfigCollectionDefault, "The name of the data collection used to house adapter configuration (optional)")
 	flag.StringVar(&topicRoot, "topicRoot", "modbus/command", "The root of all MQTT topics that should be used to publish/subscribe to (optional)")
 	flag.StringVar(&logLevel, "logLevel", "info", "The level of logging to use. Available levels are 'debug, 'info', 'warn', 'error', 'fatal' (optional)")
 	flag.StringVar(&adapterID, "adapterID", "", "Unique identifier for this adapter, typically SiteID where modbus adapter is deployed (optional)")
@@ -88,7 +88,7 @@ func usage() {
 func validateFlags() {
 	flag.Parse()
 
-	if sysKey == "" || sysSec == "" || activeKey == "" || adapterConfigCollection == "" {
+	if sysKey == "" || sysSec == "" || activeKey == "" {
 
 		log.Printf("ERROR - Missing required flags\n\n")
 		flag.Usage()
@@ -157,13 +157,13 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 
 	cbBroker.client = cb.NewDeviceClientWithAddrs(*(platformBroker.platformURL), *(platformBroker.messagingURL), *(platformBroker.systemKey), *(platformBroker.systemSecret), *(platformBroker.username), *(platformBroker.password))
 
-	for err := cbBroker.client.Authenticate(); err != nil; {
+	for _, err := cbBroker.client.Authenticate(); err != nil; {
 		log.Printf("[ERROR] initCbClient - Error authenticating %s: %s\n", platformBroker.name, err.Error())
 		log.Println("[ERROR] initCbClient - Will retry in 1 minute...")
 
 		// sleep 1 minute
 		time.Sleep(time.Duration(time.Minute * 1))
-		err = cbBroker.client.Authenticate()
+		_, err = cbBroker.client.Authenticate()
 	}
 
 	//Retrieve adapter configuration data
@@ -188,8 +188,9 @@ func OnConnectLost(client mqtt.Client, connerr error) {
 	//End the existing goRoutines
 	endSubscribeWorkerChannel <- "Stop Channel"
 
-	//We don't need to worry about manally re-initializing the mqtt client. The auto reconnect logic will
-	//automatically try and reconnect. The reconnect interval could be as much as 20 minutes.
+	//We can't rely on MQTT auto-reconnect because it is most likely that our auth token expired
+	//When the connection is lost, just exit
+	log.Fatalln("[FATAL] onConnectLost - MQTT Connection was lost. Stopping Adapter to force device reauth.")
 }
 
 //When the connection to the broker is complete, set up the subscriptions
@@ -282,10 +283,11 @@ func handleRequest(payload []byte) {
 	log.Printf("[DEBUG] handleRequest - Json payload received: %s\n", string(payload))
 
 	var jsonPayload map[string]interface{}
+	var errorCode = 0
 
 	if err := json.Unmarshal(payload, &jsonPayload); err != nil {
 		log.Printf("[ERROR] handleRequest - Error encountered unmarshalling json: %s\n", err.Error())
-		addErrorToPayload(jsonPayload, "Error encountered unmarshalling json: "+err.Error(), 0)
+		addErrorToPayload(jsonPayload, "Error encountered unmarshalling json: "+err.Error(), errorCode)
 		jsonPayload["request"] = payload
 	} else {
 		log.Printf("[DEBUG] handleRequest - Json payload received: %#v\n", jsonPayload)
@@ -293,13 +295,13 @@ func handleRequest(payload []byte) {
 
 	if jsonPayload["ModbusHost"] == nil {
 		log.Println("[ERROR] handleRequest - ModbusHost not specified in incoming payload")
-		addErrorToPayload(jsonPayload, "ModbusHost is required", 0)
+		addErrorToPayload(jsonPayload, "ModbusHost is required", errorCode)
 		jsonPayload["request"] = payload
 	}
 
 	if jsonPayload["FunctionCode"] == nil {
 		log.Println("[ERROR] handleRequest - FunctionCode not specified in incoming payload")
-		addErrorToPayload(jsonPayload, "FunctionCode is required", 0)
+		addErrorToPayload(jsonPayload, "FunctionCode is required", errorCode)
 		jsonPayload["request"] = payload
 	} else {
 
@@ -325,7 +327,7 @@ func handleRequest(payload []byte) {
 
 	if jsonPayload["StartAddress"] == nil {
 		log.Println("[ERROR] handleRequest - StartAddress not specified in incoming payload")
-		addErrorToPayload(jsonPayload, "StartAddress is required", 0)
+		addErrorToPayload(jsonPayload, "StartAddress is required", errorCode)
 		jsonPayload["request"] = payload
 	}
 
@@ -338,7 +340,7 @@ func handleRequest(payload []byte) {
 			uint16(jsonPayload["FunctionCode"].(float64)) == modbus.FuncCodeWriteMultipleRegisters ||
 			uint16(jsonPayload["FunctionCode"].(float64)) == modbus.FuncCodeReadWriteMultipleRegisters) {
 		log.Println("[ERROR] handleRequest - AddressCount not specified in incoming payload and is required for the specified function code.")
-		addErrorToPayload(jsonPayload, "AddressCount is required", 0)
+		addErrorToPayload(jsonPayload, "AddressCount is required", errorCode)
 		jsonPayload["request"] = payload
 	}
 
@@ -350,7 +352,7 @@ func handleRequest(payload []byte) {
 			uint16(jsonPayload["FunctionCode"].(float64)) == modbus.FuncCodeMaskWriteRegister ||
 			uint16(jsonPayload["FunctionCode"].(float64)) == modbus.FuncCodeReadWriteMultipleRegisters) {
 		log.Println("[ERROR] handleRequest - Data not specified in incoming payload and is required for the specified function code.")
-		addErrorToPayload(jsonPayload, "Data is required for 'write' function codes", 0)
+		addErrorToPayload(jsonPayload, "Data is required for 'write' function codes", errorCode)
 		jsonPayload["request"] = payload
 	}
 
@@ -364,10 +366,16 @@ func handleRequest(payload []byte) {
 			log.Printf("[ERROR] handleRequest - Error encountered: %s\n", err.Error())
 			switch err.(type) {
 			case *net.OpError:
+				log.Printf("[DEBUG] handleRequest - net.OpError received\n")
 				//We have a network issue. At this point, we need to continually try and reconnect.
 				modbusHandler.Address = ""
+			case *modbus.ModbusError:
+				log.Printf("[DEBUG] handleRequest - modbus.ModbusError received:  %#v\n", err)
+				//extract the modbus exception code
+				errorCode = int(err.(*modbus.ModbusError).ExceptionCode)
+				log.Printf("[DEBUG] handleRequest - modbus exception code = %d\n", errorCode)
 			}
-			addErrorToPayload(jsonPayload, err.Error(), 0)
+			addErrorToPayload(jsonPayload, err.Error(), errorCode)
 		} else {
 			if jsonPayload["success"] == nil {
 				jsonPayload["success"] = true
@@ -484,9 +492,7 @@ func addErrorToPayload(payload map[string]interface{}, errMsg string, errCode in
 	payload["success"] = false
 	payload["error"] = make(map[string]interface{})
 
-	if errCode != 0 {
-		payload["error"].(map[string]interface{})["code"] = errCode
-	}
+	payload["error"].(map[string]interface{})["code"] = errCode
 
 	if errMsg != "" {
 		payload["error"].(map[string]interface{})["message"] = errMsg
