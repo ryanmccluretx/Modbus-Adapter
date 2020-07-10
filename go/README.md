@@ -97,16 +97,12 @@ The payload of a Modbus Device Request should have the following
  * @example
 
     {
-      "request": {
-            "ModbusHost": "192.168.0.9:502",
-            "FunctionCode": 1, 
-            "StartAddress": 0, 
-            "AddressCount": 3, 
-            "Data": [2, 3, 4] 
-      },
-      "response": {
-          "Data": [45,2,5]
-      }
+      "ModbusHost": "192.168.0.9:502",
+      "FunctionCode": 1, 
+      "StartAddress": 0, 
+      "AddressCount": 3, 
+      "Data": [2, 3, 4] 
+      "success": true
     }
   */
 ```
@@ -139,6 +135,7 @@ The payload of a Modbus Device Request should have the following
             "AddressCount": 3, 
             "Data": [2, 3, 4] 
       },
+      "success": false,
       "error": {
             "code": 0,
             "message": "malformed JSON"
