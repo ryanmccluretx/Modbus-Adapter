@@ -469,7 +469,7 @@ func handleModbusRequest(payload map[string]interface{}) error {
 
 	switch functionCode {
 	case modbus.FuncCodeReadDiscreteInputs,
-		modbus.FuncCodeReadCoils:
+		modbus.FuncCodeReadCoils, modbus.FuncCodeWriteSingleCoil, modbus.FuncCodeWriteMultipleCoils:
 		log.Printf("[DEBUG] handleModbusRequest - adding results to Data field in payload: %#v\n", modbusResults)
 		payload["Data"] = translateModbusBytesToData(modbusResults, addressCount)
 
