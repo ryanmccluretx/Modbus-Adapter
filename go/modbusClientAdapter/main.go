@@ -28,7 +28,7 @@ const (
 	messURL                        = "localhost:1883"
 	msgSubscribeQos                = 0
 	msgPublishQos                  = 0
-	JavascriptISOString            = "2006-01-02T15:04:05.000Z07:00"
+	JavascriptISOString            = "2006-01-02T15:04:05.000Z" //07:00"
 	tcpTimeout                     = 10 * time.Second
 	tcpIdleTimeout                 = 60 * time.Second
 	adapterConfigCollectionDefault = "adapter_config"
@@ -48,7 +48,7 @@ var (
 	cbSubscribeChannel        <-chan *mqttTypes.Publish
 	endSubscribeWorkerChannel chan string
 	adapterID                 string
-	modbusHandler             *modbus.TCPClientHandler
+	modbusHandler             *modbus.RTUClientHandler
 	modbusClient              modbus.Client
 )
 
@@ -219,9 +219,24 @@ func subscribeWorker() {
 	log.Println("[INFO] subscribeWorker - Starting subscribeWorker")
 
 	log.Println("[INFO] subscribeWorker - Initializing the modbus handler")
-	modbusHandler = &modbus.TCPClientHandler{}
-	modbusHandler.Timeout = tcpTimeout
-	modbusHandler.IdleTimeout = tcpIdleTimeout
+	//TODO
+	//modbusHandler = &modbus.RTUClientHandler{}
+	modbusHandler = modbus.NewRTUClientHandler("/dev/ttyM0")
+	modbusHandler.BaudRate = 4800
+	modbusHandler.DataBits = 8
+	modbusHandler.Parity = "E"
+	modbusHandler.StopBits = 1
+	modbusHandler.SlaveId = 1 //TODO: is this right?
+	modbusHandler.Timeout = 5 * time.Second
+	if err := resetModbusClient("/dev/ttyM0"); err != nil {
+		log.Println("[ERROR] error on initial setup")
+	}
+	// modbusHandler.RS485.Enabled = true
+	// modbusHandler.RS485.RtsHighAfterSend = false
+	// modbusHandler.RS485.RtsHighDuringSend = false
+	// modbusHandler.RS485.DelayRtsAfterSend = 100 * time.Millisecond
+	// modbusHandler.RS485.DelayRtsBeforeSend = 100 * time.Millisecond
+	// modbusHandler.RS485.RxDuringTx = false
 
 	if strings.ToUpper(logLevel) == "DEBUG" {
 		modbusHandler.Logger = log.New(os.Stdout, "", log.LstdFlags|log.Lshortfile)
@@ -256,7 +271,8 @@ func resetModbusClient(address string) (err error) {
 		return fmt.Errorf("Invalid address for modbus host: %s", address)
 	}
 
-	modbusHandler.Address = address
+	log.Println("[DEBUG] resetModbusClient - setting new address")
+	modbusHandler.Address = address //TODO: NEED THIS?
 
 	// Connect to modbus manually so that multiple requests are handled in one connection session
 	log.Println("[DEBUG] resetModbusClient - Connecting modbus handler")
@@ -305,7 +321,7 @@ func handleRequest(payload []byte) {
 		jsonPayload["request"] = payload
 	} else {
 
-		log.Printf("FunctionCode received = %d", uint16(jsonPayload["FunctionCode"].(float64)))
+		log.Printf("[DEBUG] FunctionCode received = %d", uint16(jsonPayload["FunctionCode"].(float64)))
 
 		if uint16(jsonPayload["FunctionCode"].(float64)) != modbus.FuncCodeReadDiscreteInputs &&
 			uint16(jsonPayload["FunctionCode"].(float64)) != modbus.FuncCodeReadCoils &&
@@ -392,10 +408,13 @@ func handleModbusRequest(payload map[string]interface{}) error {
 	var modbusResults []byte
 	var err error
 
-	//See if the modbus address changed
-	if modbusHandler.Address != payload["ModbusHost"] {
+	// //See if the modbus address changed
+	log.Printf("[DEBUG] current modbus host address %s\n", modbusHandler.Address)
+	//if modbusHandler.Address != payload["ModbusHost"] {
+	if modbusHandler.Address != "/dev/ttyM0" {
 		log.Println("[INFO] handleModbusRequest - Modbus host address modified. Resetting Modbus Client")
-		if err := resetModbusClient(payload["ModbusHost"].(string)); err != nil {
+		//if err := resetModbusClient(payload["ModbusHost"].(string)); err != nil {
+		if err := resetModbusClient("/dev/ttyM0"); err != nil {
 			return err
 		}
 	}
@@ -419,13 +438,13 @@ func handleModbusRequest(payload map[string]interface{}) error {
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteSingleCoil")
 		var modbusData uint16 = 0x0000
 
-		switch payload["Data"].([]interface{})[0].(type) {
+		switch payload["Data"].(interface{}).(type) {
 		case float64:
-			if payload["Data"].([]interface{})[0].(float64) == 1 {
+			if payload["Data"].(interface{}).(float64) == 1 {
 				modbusData = 0xFF00
 			}
 		case bool:
-			if payload["Data"].([]interface{})[0].(bool) == true {
+			if payload["Data"].(interface{}).(bool) == true {
 				modbusData = 0xFF00
 			}
 		default:
@@ -444,7 +463,7 @@ func handleModbusRequest(payload map[string]interface{}) error {
 		modbusResults, err = modbusClient.ReadHoldingRegisters(startAddress, addressCount)
 	case modbus.FuncCodeWriteSingleRegister:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteSingleRegister")
-		modbusResults, err = modbusClient.WriteSingleRegister(startAddress, uint16(payload["Data"].([]float64)[0]))
+		modbusResults, err = modbusClient.WriteSingleRegister(startAddress, uint16(payload["Data"].(float64)))
 	case modbus.FuncCodeWriteMultipleRegisters:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteMultipleRegisters")
 		modbusResults, err = modbusClient.WriteMultipleRegisters(startAddress, addressCount, payload["Data"].([]byte))
@@ -566,7 +585,7 @@ func publishModbusResponse(respJson map[string]interface{}) {
 	}
 
 	//Add a timestamp to the payload
-	respJson["timestamp"] = time.Now().Format(JavascriptISOString)
+	respJson["timestamp"] = time.Now().UTC().Format(JavascriptISOString)
 
 	// TODO Add custom key for adapterID, defaulting to rail context, SiteID
 	if adapterID != "" {
