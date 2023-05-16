@@ -222,6 +222,8 @@ func subscribeWorker() {
 	modbusHandler = &modbus.TCPClientHandler{}
 	modbusHandler.Timeout = tcpTimeout
 	modbusHandler.IdleTimeout = tcpIdleTimeout
+	modbusHandler.SlaveId = 1
+	modbusHandler.Timeout = 5 * time.Second
 
 	if strings.ToUpper(logLevel) == "DEBUG" {
 		modbusHandler.Logger = log.New(os.Stdout, "", log.LstdFlags|log.Lshortfile)
@@ -305,7 +307,7 @@ func handleRequest(payload []byte) {
 		jsonPayload["request"] = payload
 	} else {
 
-		log.Printf("FunctionCode received = %d", uint16(jsonPayload["FunctionCode"].(float64)))
+		log.Printf("[DEBUG] FunctionCode received = %d", uint16(jsonPayload["FunctionCode"].(float64)))
 
 		if uint16(jsonPayload["FunctionCode"].(float64)) != modbus.FuncCodeReadDiscreteInputs &&
 			uint16(jsonPayload["FunctionCode"].(float64)) != modbus.FuncCodeReadCoils &&
@@ -419,13 +421,22 @@ func handleModbusRequest(payload map[string]interface{}) error {
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteSingleCoil")
 		var modbusData uint16 = 0x0000
 
-		switch payload["Data"].([]interface{})[0].(type) {
+		// switch payload["Data"].([]interface{})[0].(type) {
+		// case float64:
+		// 	if payload["Data"].([]interface{})[0].(float64) == 1 {
+		// 		modbusData = 0xFF00
+		// 	}
+		// case bool:
+		// 	if payload["Data"].([]interface{})[0].(bool) == true {
+		// 		modbusData = 0xFF00
+		// 	}
+		switch payload["Data"].(interface{}).(type) {
 		case float64:
-			if payload["Data"].([]interface{})[0].(float64) == 1 {
+			if payload["Data"].(interface{}).(float64) == 1 {
 				modbusData = 0xFF00
 			}
 		case bool:
-			if payload["Data"].([]interface{})[0].(bool) == true {
+			if payload["Data"].(interface{}).(bool) == true {
 				modbusData = 0xFF00
 			}
 		default:
@@ -444,7 +455,7 @@ func handleModbusRequest(payload map[string]interface{}) error {
 		modbusResults, err = modbusClient.ReadHoldingRegisters(startAddress, addressCount)
 	case modbus.FuncCodeWriteSingleRegister:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteSingleRegister")
-		modbusResults, err = modbusClient.WriteSingleRegister(startAddress, uint16(payload["Data"].([]float64)[0]))
+		modbusResults, err = modbusClient.WriteSingleRegister(startAddress, uint16(payload["Data"].(float64)))
 	case modbus.FuncCodeWriteMultipleRegisters:
 		log.Println("[DEBUG] handleModbusRequest - invoking FuncCodeWriteMultipleRegisters")
 		modbusResults, err = modbusClient.WriteMultipleRegisters(startAddress, addressCount, payload["Data"].([]byte))
@@ -568,10 +579,10 @@ func publishModbusResponse(respJson map[string]interface{}) {
 	//Add a timestamp to the payload
 	respJson["timestamp"] = time.Now().Format(JavascriptISOString)
 
-	// TODO Add custom key for adapterID, defaulting to rail context, SiteID
-	if adapterID != "" {
-		respJson["SiteID"] = adapterID
-	}
+	// // TODO Add custom key for adapterID, defaulting to rail context, SiteID
+	// if adapterID != "" {
+	// 	respJson["SiteID"] = adapterID
+	// }
 
 	respStr, err := json.Marshal(respJson)
 	if err != nil {
