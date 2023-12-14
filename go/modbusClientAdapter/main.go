@@ -222,7 +222,8 @@ func subscribeWorker() {
 	modbusHandler = &modbus.TCPClientHandler{}
 	modbusHandler.Timeout = tcpTimeout
 	modbusHandler.IdleTimeout = tcpIdleTimeout
-	modbusHandler.SlaveId = 1
+	modbusHandler.SlaveId = 255
+	log.Printf("[DEBUG] subscribeWorker - Slave ID set to %d\n", modbusHandler.SlaveId)
 	modbusHandler.Timeout = 5 * time.Second
 
 	if strings.ToUpper(logLevel) == "DEBUG" {
